@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  match /games/{code} {
+   function signed() { return request.auth != null; }
+   function participant() { return signed() && (resource.data.players.Nicolas == request.auth.uid || resource.data.players.Suzanne == request.auth.uid); }
+   allow create: if signed() && request.resource.data.host == request.auth.uid && request.resource.data.status == 'lobby';
+   allow read: if signed(); // Le code de salle sert de secret d'accès. Voir README pour limites de sécurité.
+   allow update: if signed() && (
+    (resource.data.status == 'lobby' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players']) && request.resource.data.players.keys().hasOnly(['Nicolas','Suzanne']) && (request.resource.data.players.Nicolas == request.auth.uid || request.resource.data.players.Suzanne == request.auth.uid))
+    || (participant() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','startedAt','finishedAt','accusation','found','interviews','messages']))
+   );
+   allow delete: if false;
+  }
+ }
+}
