@@ -1,5 +1,5 @@
 // Remplacez ces valeurs par la configuration de votre application Web Firebase.
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyDrZ5Iqjkvadbae0hJjxLRZjZKyX-McvUs",
   authDomain: "les-enqueteurs-setn.firebaseapp.com",
   projectId: "les-enqueteurs-setn",
