@@ -18,7 +18,29 @@ function render(role){const c=room.caseData,joined=!!room.players[other(role)];i
 if(room.status==='done'){const a=room.accusation,win=a?.suspect===c.people[c.guilty].id;screen(`<div class="panel"><h2>${win?'Affaire résolue !':'Affaire non résolue'}</h2><p>Le responsable était <b>${esc(c.people[c.guilty].name)}</b>. Mobile : ${esc(c.motive)}. Mode opératoire : ${esc(c.method)}.</p><h2>Score : ${win?Math.min(100,60+room.found.length*5):Math.min(40,room.found.length*5)}/100</h2><p>${esc(a?.reason||'Le temps est écoulé.')}</p><button id="again">Nouvelle affaire</button></div>`);$('again').onclick=home;return}
 const remaining=Math.max(0,5400000-(Date.now()-room.startedAt));const available=c.clues.filter(x=>x.role===role&&!room.found.includes(x.id));const found=c.clues.filter(x=>room.found.includes(x.id));const interviews=room.interviews.filter(x=>x.role===role);screen(`<div class="top"><div><h2>${esc(c.title)}</h2><span class="pill">${esc(role)} · Code ${esc(roomId)}</span></div><div class="timer" id="timer">${format(remaining)}</div></div><div class="panel"><p>${esc(c.intro)}</p><small>Les preuves sont partagées. Chaque enquêteur dispose d'indices exclusifs et de ses propres interrogatoires.</small></div><div class="grid"><section><div class="panel"><h2>Explorer les lieux</h2><label>Choisissez une pièce</label><select id="location">${c.site.rooms.map(x=>`<option>${esc(x)}</option>`).join('')}</select><div class="actions"><button id="search">Fouiller</button></div><p id="searchResult" class="muted"></p><h3>Preuves collectées (${found.length}/${c.clues.length})</h3>${found.map(x=>`<div class="clue"><small>${esc(x.role)} · ${esc(x.room)}</small><p>${esc(x.text)}</p></div>`).join('')||'<p class="muted">Aucune preuve pour le moment.</p>'}</div><div class="panel"><h2>Interroger un suspect</h2><select id="suspect">${c.people.map(p=>`<option value="${p.id}">${esc(p.name)} — ${esc(p.role)}</option>`).join('')}</select><p><button id="interview">Interroger</button></p><div id="interviewResult" class="muted">${interviews.length} interrogatoire(s) effectué(s) sur cet écran.</div></div></section><section><div class="panel"><h2>Messagerie des enquêteurs</h2><div class="log" id="messages">${room.messages.map(m=>`<p><small>${esc(m.role)}</small><br>${esc(m.text)}</p>`).join('')}</div><form id="chat" class="actions"><input id="message" maxlength="400" placeholder="Écrire à votre partenaire…" required><button>Envoyer</button></form></div><div class="panel"><h2>Accusation finale</h2><p class="muted">Une seule accusation commune. Choisissez votre suspect et justifiez votre décision.</p><select id="accused">${c.people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><label>Votre raisonnement</label><textarea id="reason" rows="3" maxlength="600" placeholder="Mobile, preuve et chronologie…"></textarea><p><button id="accuse">Déposer l'accusation</button></p></div></section></div>`);
 $('search').onclick=async()=>{const loc=$('location').value,x=available.find(x=>x.room===loc);if(!x){$('searchResult').textContent='Aucun nouvel indice personnel dans cette pièce.';return}try{await api.runTransaction(db,async tx=>{const ref=api.doc(db,'games',roomId),snap=await tx.get(ref),g=snap.data();if(g.status!=='active'||g.found.includes(x.id))return;tx.update(ref,{found:[...g.found,x.id]})})}catch(e){alert(e.message)}};
-$('interview').onclick=async()=>{const p=c.people.find(x=>x.id===Number($('suspect').value));$('interviewResult').textContent=p.statement;try{await api.runTransaction(db,async tx=>{const ref=api.doc(db,'games',roomId),snap=await tx.get(ref),g=snap.data();if(g.status!=='active')return;tx.update(ref,{interviews:[...g.interviews.slice(-99),{role,suspect:p.id,at:Date.now()}]})})}catch(e){alert(e.message)}};
+$('interview').onclick=async()=>{
+  const p=c.people.find(x=>x.id===Number($('suspect').value));
+  if(!p)return;
+
+  try {
+    await api.runTransaction(db,async tx=>{
+      const ref=api.doc(db,'games',roomId);
+      const snap=await tx.get(ref);
+      const g=snap.data();
+      if(g.status!=='active')return;
+      tx.update(ref,{
+        interviews:[
+          ...g.interviews.slice(-99),
+          {role,suspect:p.id,at:Date.now()}
+        ]
+      });
+    });
+  }catch(e){
+    alert(e.message);
+  }
+
+  alert('INTERROGATOIRE — '+p.name+'\n\n'+p.statement);
+};
 $('chat').onsubmit=async e=>{e.preventDefault();const t=$('message').value.trim();if(!t)return;$('message').value='';try{await api.runTransaction(db,async tx=>{const ref=api.doc(db,'games',roomId),snap=await tx.get(ref),g=snap.data();if(g.status!=='active')return;tx.update(ref,{messages:[...g.messages.slice(-99),{role,text:t,at:Date.now()}]})})}catch(e){alert(e.message)}};
 $('accuse').onclick=async()=>{if(!confirm('Confirmer cette accusation ? Elle termine la partie pour les deux joueurs.'))return;try{await api.runTransaction(db,async tx=>{const ref=api.doc(db,'games',roomId),snap=await tx.get(ref),g=snap.data();if(g.status!=='active')return;tx.update(ref,{status:'done',finishedAt:Date.now(),accusation:{suspect:Number($('accused').value),reason:$('reason').value,role}})})}catch(e){alert(e.message)}};
 clearInterval(clock);clock=setInterval(()=>{const t=Math.max(0,5400000-(Date.now()-room.startedAt));if($('timer'))$('timer').textContent=format(t);if(t===0&&room.host===uid&&room.status==='active')api.updateDoc(api.doc(db,'games',roomId),{status:'done',finishedAt:Date.now()}).catch(()=>{})},1000);
